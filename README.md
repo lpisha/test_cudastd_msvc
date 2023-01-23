@@ -6,7 +6,7 @@ Reproducer for a bug in the CUDA Standard Library (`libcudacxx`) where C++ (not 
 
 This is in the context of projects which contain both C++ and CUDA source files, where the C++ files are compiled with MSVC and the CUDA files with nvcc. The project uses the CUDA Standard Library across host and device code, so common headers which get included by both .cpp and .cu files include parts of the CUDA Standard Library.
 
-During C++ compilation, two headers in the CUDA Standard Library, `<cuda/std/limits>` and `<cuda/std/atomic>`, expect that MSVC will have declared / defined certain symbols, but it has not, causing compilation errors. About half of the headers in the CUDA Standard Library include these two headers, making much of the library unusable.
+During C++ compilation, some headers in the CUDA Standard Library expect that MSVC will have declared / defined certain symbols, but in certain MSVC / Visual Studio versions it has not, causing compilation errors. Depending on the MSVC version, many of the headers in the CUDA Standard Library include these problematic headers, making much of the library unusable.
 
 This bug does not arise in the compilation of .cu files with nvcc, only in the compilation of .cpp files with MSVC.
 
@@ -23,9 +23,15 @@ So, when building with Visual Studio 15 2017 (toolset v141) or Visual Studio 16 
 
 I'm not able to find any mention of `__ATOMIC_RELEASE` in any of the Microsoft / Windows headers on my machine, so it appears that this code should never have worked.
 
+Edit: Fixed on top-of-tree `libcudacxx`.
+
 ### How did this happen: `<cuda/std/functional>`
 
 This issue only arose after fixing the `<limits>` issue. VS 2022 gives multiple syntax errors around line 3026 of `<cuda/std/functional>` (implementation of `__search`). The code looks fine by eye and works with VS 2017 and VS 2019. Perhaps now the symbols `_D1` and `_D2` are already defined elsewhere?
+
+### How did this happen: `<cuda/std/type_traits>`
+
+This fails only in VS 2017: `<cuda/std/detail/libcxx/include/__type_traits/disjunction.h>`: line 47, "error C2210: '_First': pack expansions cannot be used as arguments to non-packed parameters in alias templates". Not exactly sure what the issue is here.
 
 ### Version information
 
@@ -38,10 +44,11 @@ All of the tests compile and work correctly on Linux.
 ### How to build / use
 
 By default, compilation will succeed on both Windows and Linux. To test the different sets of headers, set any of the following defines to 1 in `test.hpp`:
-- `TEST_FAIL_LIMITS` - OK on VS 2017 and 2019, fails on VS 2022
+- `TEST_TYPETRAITS` - fails on VS 2017, OK on VS 2019 and 2022
+- `TEST_LIMITS` - OK on VS 2017 and 2019, fails on VS 2022
 - `TEST_FIX_LIMITS` - fixes limits on VS 2022
-- `TEST_FAIL_ATOMIC` - fails on all VS versions tested
-- `TEST_FAIL_FUNCTIONAL` - fails on VS 2022
+- `TEST_ATOMIC` - with top-of-tree, works on all versions now
+- `TEST_FUNCTIONAL` - fails on VS 2022
 
 Build with CMake as usual.
 
